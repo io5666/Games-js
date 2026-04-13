@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Maze Duel</title>
+    <style>
+        :root {
+            --bg-color: #0a0a12;
+            --p1-color: #00f2ff;
+            --p2-color: #ff007b;
+            --wall-color: #1a1a2e;
+            --path-color: #11111d;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, var(--p1-color), var(--p2-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px rgba(255,255,255,0.3));
+        }
+
+        .stats {
+            display: flex;
+            gap: 40px;
+            margin-top: 10px;
+        }
+
+        .player-info {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .p1-ui { border-color: var(--p1-color); box-shadow: 0 0 10px var(--p1-color); }
+        .p2-ui { border-color: var(--p2-color); box-shadow: 0 0 10px var(--p2-color); }
+
+        #game-container {
+            position: relative;
+            background: var(--wall-color);
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            display: block;
+            border-radius: 4px;
+        }
+
+        /* Modal de victoria */
+        #overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+        }
+
+        #overlay h2 { font-size: 4rem; margin-bottom: 20px; }
+        
+        button {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            border-radius: 50px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: white;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Neon Maze Duel</h1>
+        <div class="stats">
+            <div class="player-info p1-ui">Jugador 1: WASD</div>
+            <div class="player-info p2-ui">Jugador 2: Flechas</div>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="mazeCanvas"></canvas>
+    </div>
+
+    <div id="overlay">
+        <h2 id="winner-text">¡Gana el Jugador 1!</h2>
+        <button onclick="resetGame()">Jugar de nuevo</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mazeCanvas');
+        const ctx = canvas.getContext('2d');
+        const winnerText = document.getElementById('winner-text');
+        const overlay = document.getElementById('overlay');
+
+        // Configuración
+        const ROWS = 21; // Debe ser impar
+        const COLS = 21; 
+        const CELL_SIZE = 30;
+        
+        canvas.width = COLS * CELL_SIZE;
+        canvas.height = ROWS * CELL_SIZE;
+
+        let grid = [];
+        let player1, player2;
+
+        class Player {
+            constructor(x, y, color, targetX, targetY, id) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.targetX = targetX;
+                this.targetY = targetY;
+                this.id = id;
+            }
+
+            draw() {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(
+                    this.x * CELL_SIZE + CELL_SIZE / 2,
+                    this.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 3, 0, Math.PI * 2
+                );
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function initMaze() {
+            grid = Array.from({ length: ROWS }, () => Array(COLS).fill(1));
+            
+            // Generador de laberinto (Recursive Backtracker)
+            function carve(r, c) {
+                grid[r][c] = 0;
+                const directions = [[0, 2], [0, -2], [2, 0], [-2, 0]].sort(() => Math.random() - 0.5);
+                
+                for (let [dr, dc] of directions) {
+                    let nr = r + dr, nc = c + dc;
+                    if (nr > 0 && nr < ROWS && nc > 0 && nc < COLS && grid[nr][nc] === 1) {
+                        grid[r + dr / 2][c + dc / 2] = 0;
+                        carve(nr, nc);
+                    }
+                }
+            }
+            
+            carve(1, 1);
+            
+            // Asegurar que las esquinas de meta estén abiertas
+            grid[1][1] = 0;
+            grid[ROWS-2][COLS-2] = 0;
+
+            player1 = new Player(1, 1, '#00f2ff', COLS - 2, ROWS - 2, 1);
+            player2 = new Player(COLS - 2, ROWS - 2, '#ff007b', 1, 1, 2);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Dibujar Laberinto
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (grid[r][c] === 1) {
+                        ctx.fillStyle = '#1a1a2e';
+                        ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    } else {
+                        ctx.fillStyle = '#0d0d16';
+                        ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    }
+                }
+            }
+
+            // Dibujar Metas (zonas brillantes)
+            drawTarget(player1.targetX, player1.targetY, player1.color);
+            drawTarget(player2.targetX, player2.targetY, player2.color);
+
+            player1.draw();
+            player2.draw();
+        }
+
+        function drawTarget(x, y, color) {
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = color;
+            ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            ctx.globalAlpha = 1.0;
+        }
+
+        function movePlayer(player, dr, dc) {
+            let newR = player.y + dr;
+            let newC = player.x + dc;
+
+            if (newR >= 0 && newR < ROWS && newC >= 0 && newC < COLS && grid[newR][newC] === 0) {
+                player.y = newR;
+                player.x = newC;
+                checkWin(player);
+            }
+        }
+
+        function checkWin(player) {
+            if (player.x === player.targetX && player.y === player.targetY) {
+                winnerText.innerText = `¡Gana el Jugador ${player.id}!`;
+                winnerText.style.color = player.color;
+                overlay.style.display = 'flex';
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            
+            // P1: WASD
+            if (key === 'w') movePlayer(player1, -1, 0);
+            if (key === 's') movePlayer(player1, 1, 0);
+            if (key === 'a') movePlayer(player1, 0, -1);
+            if (key === 'd') movePlayer(player1, 0, 1);
+
+            // P2: Flechas
+            if (key === 'arrowup') movePlayer(player2, -1, 0);
+            if (key === 'arrowdown') movePlayer(player2, 1, 0);
+            if (key === 'arrowleft') movePlayer(player2, 0, -1);
+            if (key === 'arrowright') movePlayer(player2, 0, 1);
+
+            draw();
+        });
+
+        function resetGame() {
+            overlay.style.display = 'none';
+            initMaze();
+            draw();
+        }
+
+        // Inicio inicial
+        initMaze();
+        draw();
+    </script>
+</body>
+</html>
